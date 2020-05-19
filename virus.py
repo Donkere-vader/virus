@@ -3,17 +3,17 @@ import random
 import math
 import threading
 
-SCREEN_WIDTH = 900
-SCREEN_HEIGHT = 900
+SCREEN_WIDTH = 1800
+SCREEN_HEIGHT = 1000
 SCREEN_TITLE = "Virus"
 
-HOUSES = 300
+HOUSES = 500
 HOUSE_WIDTH = 20
 PERSON_RADIUS = 5
 PERSON_SPEED = 3
 TRAVELING_SPEED = 10
 
-VISITING_CHANCE = 0.1  # out of 100
+VISITING_CHANCE = 0.02  # out of 100
 
 
 def check_in_area(pos: tuple, area: tuple):  # area has to be a rectangle
@@ -87,7 +87,10 @@ class Person(arcade.Sprite):
         if random.uniform(0, 100) < VISITING_CHANCE:
             self.visiting = True
             self.visiting_time = random.randint(20, 100)
-            self.area = random.choice(self.parent_game.houses).area
+            random_house = random.choice(self.parent_game.houses)
+            while random_house.persons == 0:
+                random_house = random.choice(self.parent_game.houses)
+            self.area = random_house.area
 
         # am i in the right spot? if not where do i go?
         if check_in_area((self.center_x, self.center_y), self.area):  # in the correct area
@@ -222,8 +225,10 @@ class Game(arcade.Window):
         batch_amount = HOUSES / divide_num
 
         for i in range(divide_num):
-            thread = threading.Thread(target=self.update_partialy, args=(i * batch_amount, batch_amount), daemon=True)
-            thread.start()
+            #thread = threading.Thread(target=self.update_partialy, args=(i * batch_amount, batch_amount), daemon=True)
+            #thread.start()
+
+            self.update_partialy(i*batch_amount, batch_amount)
 
     def on_draw(self):
         arcade.start_render()
@@ -236,7 +241,12 @@ class Game(arcade.Window):
     def on_key_press(self, key, mod):
         if key == arcade.key.I:
             # make someone infected
-            person = self.houses[random.randint(0, len(self.houses)-1)].persons[0]
+            while True:
+                try:
+                    person = self.houses[random.randint(0, len(self.houses)-1)].persons[0]
+                    break
+                except IndexError:
+                    pass
             person.infect()
 
 
