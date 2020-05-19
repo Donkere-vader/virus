@@ -9,9 +9,10 @@ SCREEN_TITLE = "Virus"
 HOUSES = 20
 HOUSE_WIDTH = 50
 PERSON_RADIUS = 5
-PERSON_SPEED = 2
+PERSON_SPEED = 3
+TRAVELING_SPEED = 10
 
-VISITING_CHANCE = 1 # out of 100
+VISITING_CHANCE = 5 # out of 100
 
 
 def check_in_area(pos: tuple, area: tuple):  # area has to be a rectangle
@@ -42,7 +43,12 @@ class Person:
         self.change_x = 0
         self.change_y = 0
 
+        self.speed = PERSON_SPEED
+
     def on_update(self, delta_time):
+        
+
+        # if infected bigger chance to die
         if self.infected:
             self.infected_ticks += 1
 
@@ -50,13 +56,23 @@ class Person:
                 game.living -= 1
                 game.dead += 1
                 self.parent_house.persons.remove(self)
+                game.infected_persons.remove(self)
                 return
+        else:
+            # does someone infect me?
+            for person in game.infected_persons:
+                if calculate_distance((self.center_x, self.center_y), (person.center_x, person.center_y)) < self.radius * 2:
+                    self.infected = True
+                    game.infected_persons.append(self)
+                    break
 
-        if random.randint(0, 100) < VISITING_CHANCE:
+        # am i gonna visit?
+        if random.randint(0, 1000) < VISITING_CHANCE:
             self.visiting = True
             self.visiting_time = random.randint(20, 100)
             self.area = random.choice(game.houses).area
 
+        # am i in the right spot? if not where do i go?
         if check_in_area((self.center_x, self.center_y), self.area): # in the correct area
             if self.visiting:
                 self.visiting_ticks += 1
@@ -66,20 +82,24 @@ class Person:
                     self.visiting_ticks = 0 
                     self.visiting_time = 0
 
-            self.go_to(self.area)
-        else:
+            self.speed = PERSON_SPEED
             self.random_change()
 
+        else:
+            self.speed = TRAVELING_SPEED
+            self.go_to(self.area)
+
+        # move it baby!
         self.center_x += self.change_x
         self.center_y += self.change_y
     
     def go_to(self, area: tuple):
-        area_center = ((area[0][0] + area[1][0]) / 2, (area[0][1] + area[1][1] / 2))
-        
+        area_center = ((area[0][0] + area[1][0]) / 2, (area[0][1] + area[1][1]) / 2)
+
         delta_x = area_center[0] - self.center_x
         delta_y = area_center[1] - self.center_y
 
-        mul = PERSON_SPEED / calculate_distance((self.center_x, self.center_y), area_center)
+        mul = self.speed / calculate_distance((self.center_x, self.center_y), area_center)
 
         self.change_x = delta_x * mul
         self.change_y = delta_y * mul
@@ -111,6 +131,7 @@ class Game(arcade.Window):
         super().__init__(width=SCREEN_WIDTH, height=SCREEN_HEIGHT, title=SCREEN_TITLE)
         self.living = 0
         self.dead = 0
+        self.infected_persons = []
 
         self.houses = []
 
@@ -143,7 +164,9 @@ class Game(arcade.Window):
                 )
 
         # make someone infected
-        self.houses[random.randint(0, len(self.houses)-1)].persons[0].infected = True
+        person = self.houses[random.randint(0, len(self.houses)-1)].persons[0]
+        person.infected = True
+        self.infected_persons.append(person)
 
     def on_update(self, delta_time):
         for house in self.houses:
