@@ -6,13 +6,13 @@ SCREEN_WIDTH = 900
 SCREEN_HEIGHT = 900
 SCREEN_TITLE = "Virus"
 
-HOUSES = 20
-HOUSE_WIDTH = 50
+HOUSES = 60
+HOUSE_WIDTH = 20
 PERSON_RADIUS = 5
 PERSON_SPEED = 3
 TRAVELING_SPEED = 10
 
-VISITING_CHANCE = 5 # out of 100
+VISITING_CHANCE = 1  # out of 100
 
 
 def check_in_area(pos: tuple, area: tuple):  # area has to be a rectangle
@@ -46,7 +46,6 @@ class Person:
         self.speed = PERSON_SPEED
 
     def on_update(self, delta_time):
-        
 
         # if infected bigger chance to die
         if self.infected:
@@ -73,13 +72,13 @@ class Person:
             self.area = random.choice(game.houses).area
 
         # am i in the right spot? if not where do i go?
-        if check_in_area((self.center_x, self.center_y), self.area): # in the correct area
+        if check_in_area((self.center_x, self.center_y), self.area):  # in the correct area
             if self.visiting:
                 self.visiting_ticks += 1
                 if self.visiting_ticks > self.visiting_time:
                     self.area = self.parent_house.area
                     self.visiting = False
-                    self.visiting_ticks = 0 
+                    self.visiting_ticks = 0
                     self.visiting_time = 0
 
             self.speed = PERSON_SPEED
@@ -92,7 +91,7 @@ class Person:
         # move it baby!
         self.center_x += self.change_x
         self.center_y += self.change_y
-    
+
     def go_to(self, area: tuple):
         area_center = ((area[0][0] + area[1][0]) / 2, (area[0][1] + area[1][1]) / 2)
 
@@ -111,16 +110,18 @@ class Person:
     def on_draw(self):
         arcade.draw_circle_filled(self.center_x, self.center_y, self.radius, color=(255, 255, 255) if not self.infected else (255, 0, 0))
 
+
 class House:
-    def __init__(self, width, center_x, center_y):
+    def __init__(self, width, center_x, center_y, sprite):
         self.center_x = center_x
         self.center_y = center_y
         self.width = width
+        self.sprite = sprite
         self.persons = []
         self.area = ((self.center_x-self.width/2, self.center_y-self.width/2), (self.center_x+self.width/2, self.center_y+self.width/2))
 
     def on_draw(self):
-        arcade.draw_rectangle_outline(center_x=self.center_x, center_y=self.center_y, width=self.width, height=self.width, border_width=1, color=(255, 255, 255))
+        #arcade.draw_rectangle_outline(center_x=self.center_x, center_y=self.center_y, width=self.width, height=self.width, border_width=1, color=(255, 255, 255))
 
         for person in self.persons:
             person.on_draw()
@@ -132,8 +133,9 @@ class Game(arcade.Window):
         self.living = 0
         self.dead = 0
         self.infected_persons = []
-
         self.houses = []
+
+        self.sprites = arcade.sprite_list.SpriteList()
 
         grid = [0, 0]
         grid[0] = int(math.sqrt(HOUSES))
@@ -143,13 +145,23 @@ class Game(arcade.Window):
             for x in range(grid[0]):
                 center_x = x * (SCREEN_WIDTH / grid[0]) + (0.5 * (SCREEN_WIDTH / grid[0]))
                 center_y = y * (SCREEN_HEIGHT / grid[1]) + (0.5 * (SCREEN_HEIGHT / grid[1]))
+                sprite = arcade.Sprite(
+                    "house.png",
+                    scale= 0.5,
+                    image_width=100,
+                    image_height=100,
+                    center_x=center_x,
+                    center_y=center_y
+                )
                 self.houses.append(
                     House(
                         HOUSE_WIDTH,
                         center_x,
-                        center_y
+                        center_y,
+                        sprite
                     )
                 )
+                self.sprites.append(self.houses[-1].sprite)
 
         for house in self.houses:
             for i in range(random.randint(1, 5)):
@@ -176,8 +188,10 @@ class Game(arcade.Window):
     def on_draw(self):
         arcade.start_render()
 
+        self.sprites.draw()
+
         for house in self.houses:
-            house.on_draw()
+           house.on_draw()
 
 
 def main():
