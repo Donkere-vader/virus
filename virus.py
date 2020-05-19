@@ -2,16 +2,18 @@ import arcade
 import random
 import math
 import threading
+import json
 
-SCREEN_WIDTH = 1800
+SCREEN_WIDTH = 1000
 SCREEN_HEIGHT = 1000
 SCREEN_TITLE = "Virus"
 
-HOUSES = 500
+HOUSES = 200
 HOUSE_WIDTH = 20
 PERSON_RADIUS = 5
 PERSON_SPEED = 3
 TRAVELING_SPEED = 10
+SCREEN_PART_WIDTH = 100
 
 VISITING_CHANCE = 0.02  # out of 100
 
@@ -51,12 +53,20 @@ class Person(arcade.Sprite):
         self.area = self.parent_house.area
         self.change_x = 0
         self.change_y = 0
+
+        self.screen_part = [int(self.center_x // SCREEN_PART_WIDTH), int(self.center_y // SCREEN_PART_WIDTH)]
+        self.parent_game.screen_parts[self.screen_part[0]][self.screen_part[1]].append(self)
         
         self.close_persons = []
 
         self.speed = PERSON_SPEED
 
     def on_update(self):
+        _screen_part = [int(self.center_x // SCREEN_PART_WIDTH), int(self.center_y // SCREEN_PART_WIDTH)]
+        if self.screen_part != _screen_part:
+            self.parent_game.screen_parts[self.screen_part[0]][self.screen_part[1]].remove(self)
+            self.screen_part = _screen_part
+            self.parent_game.screen_parts[self.screen_part[0]][self.screen_part[1]].append(self)
 
         # if infected bigger chance to die
         if self.infected:
@@ -67,6 +77,14 @@ class Person(arcade.Sprite):
                 return
         else:
             # does someone infect me?
+            for person in self.parent_game.screen_parts[self.screen_part[0]][self.screen_part[1]]:
+                if person.infected:
+                    distance = calculate_distance((self.center_x, self.center_y), (person.center_x, person.center_y))
+                    if distance < PERSON_RADIUS * 2:
+                        self.infect()
+                        break
+
+            """
             if self.parent_game.tick % 10 == 0:
                 self.close_persons = []
                 for person in self.parent_game.infected_persons:
@@ -81,7 +99,7 @@ class Person(arcade.Sprite):
                     distance = calculate_distance((self.center_x, self.center_y), (person.center_x, person.center_y))
                     if distance < PERSON_RADIUS * 2:
                         self.infect()
-                        break
+                        break"""
 
         # am i gonna visit?
         if random.uniform(0, 100) < VISITING_CHANCE:
@@ -110,7 +128,11 @@ class Person(arcade.Sprite):
             self.go_to(self.area)
 
         # move it baby!
+        if not self.center_x + self.change_x > 0 or not self.center_x + self.change_x < SCREEN_WIDTH:
+            self.change_x = self.change_x * -1
         self.center_x += self.change_x
+        if not self.center_y + self.change_y > 0 or not self.center_y + self.change_y < SCREEN_WIDTH:
+            self.change_y = self.change_y * -1
         self.center_y += self.change_y
 
     def go_to(self, area: tuple):
@@ -132,9 +154,11 @@ class Person(arcade.Sprite):
         self.infected = True
         self.parent_game.infected_persons.append(self)
         self._set_color((255, 0, 0))
+        self.parent_game.infected += 1
 
     def die(self):
         self.parent_game.living -= 1
+        self.parent_game.infected -= 1
         self.parent_game.dead += 1
         self.parent_house.persons.remove(self)
         self.parent_game.infected_persons.remove(self)
@@ -161,10 +185,15 @@ class Game(arcade.Window):
     def __init__(self):
         super().__init__(width=SCREEN_WIDTH, height=SCREEN_HEIGHT, title=SCREEN_TITLE)
         self.living = 0
+        self.infected = 0
         self.dead = 0
         self.infected_persons = []
         self.houses = []
+        self.infected_time_line = []
+        self.dead_time_line = []
         self.tick = 0
+
+        self.screen_parts = [[[] for i in range(SCREEN_HEIGHT // SCREEN_PART_WIDTH)] for i in range(SCREEN_WIDTH // SCREEN_PART_WIDTH)]
 
         self.sprites = arcade.sprite_list.SpriteList()
 
@@ -217,6 +246,8 @@ class Game(arcade.Window):
     
     def on_update(self, delta_time):
         self.tick += 1
+        self.infected_time_line.append(self.infected)
+        self.dead_time_line.append(self.dead)
 
         divide_num = 10
         if HOUSES < divide_num:
@@ -248,7 +279,21 @@ class Game(arcade.Window):
                 except IndexError:
                     pass
             person.infect()
-
+        
+        if key == arcade.key.E:
+            print('export')
+            self.export()
+    
+    def export(self):
+        import sys
+        try:
+            json.dump(
+                    {"infected": self.infected_time_line, "dead": self.dead_time_line},
+                    open("export.json", 'w')
+                )
+        except:
+            print(sys.exc_info())
+        print('exported')
 
 def main():
     game = Game()
