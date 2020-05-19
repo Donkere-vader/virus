@@ -11,12 +11,13 @@ HOUSE_WIDTH = 50
 PERSON_RADIUS = 5
 
 class Person:
-    def __init__(self, center_x, center_y):
+    def __init__(self, house, center_x, center_y):
         self.center_x = center_x
         self.center_y = center_y
         self.infected = False
         self.infected_ticks = 0
         self.radius = PERSON_RADIUS
+        self.parent_house = house
 
     def on_update(self, delta_time):
         if self.infected:
@@ -64,12 +65,17 @@ class Game(arcade.Window):
         
         for house in self.houses:
             for i in range(random.randint(1, 5)):
+                i += 1 # to get rid of the warning
                 house.persons.append(
                     Person(
+                        house,
                         house.center_x + (random.randint(0, (HOUSE_WIDTH - PERSON_RADIUS) // 2) * random.choice([1, -1])),
                         house.center_y + (random.randint(0, (HOUSE_WIDTH - PERSON_RADIUS) // 2) * random.choice([1, -1])),
                     )
                 )
+
+        # make someone infected
+        self.houses[random.randint(0, len(self.houses))].persons[0].infected = True
 
         
     def on_update(self, delta_time):
