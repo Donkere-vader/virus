@@ -8,14 +8,15 @@ SCREEN_WIDTH = 1000
 SCREEN_HEIGHT = 1000
 SCREEN_TITLE = "Virus"
 
-HOUSES = 200
+HOUSES = 300
 HOUSE_WIDTH = 20
 PERSON_RADIUS = 5
 PERSON_SPEED = 3
 TRAVELING_SPEED = 10
-SCREEN_PART_WIDTH = 100
+SCREEN_PART_WIDTH = 50
 
-VISITING_CHANCE = 0.02  # out of 100
+DEFAULT_VISITING_CHANCE = 0.2 # out of 100 
+VISITING_CHANCE = DEFAULT_VISITING_CHANCE
 
 
 def check_in_area(pos: tuple, area: tuple):  # area has to be a rectangle
@@ -53,6 +54,8 @@ class Person(arcade.Sprite):
         self.area = self.parent_house.area
         self.change_x = 0
         self.change_y = 0
+        self.traveling = False
+        self.recovered = False
 
         self.screen_part = [int(self.center_x // SCREEN_PART_WIDTH), int(self.center_y // SCREEN_PART_WIDTH)]
         self.parent_game.screen_parts[self.screen_part[0]][self.screen_part[1]].append(self)
@@ -72,46 +75,44 @@ class Person(arcade.Sprite):
         if self.infected:
             self.infected_ticks += 1
 
-            if random.randint(0, 50000) < self.infected_ticks:
-                self.die()
-                return
-        else:
+            if random.randint(100, 50000) < self.infected_ticks:
+                if random.randint(0, 100) <= 2:
+                    self.die()
+                    return
+                else:
+                    self.recover()
+
+        elif not self.traveling and not self.recovered:
             # does someone infect me?
             for person in self.parent_game.screen_parts[self.screen_part[0]][self.screen_part[1]]:
-                if person.infected:
+                if person.infected and not person.traveling:
                     distance = calculate_distance((self.center_x, self.center_y), (person.center_x, person.center_y))
                     if distance < PERSON_RADIUS * 2:
                         self.infect()
                         break
+        
+        elif self.recovered: # Am i not recovered anymore??
+            if random.uniform(0, 100) < 0.005:
+                self.infectable() 
 
-            """
-            if self.parent_game.tick % 10 == 0:
-                self.close_persons = []
-                for person in self.parent_game.infected_persons:
-                    distance = calculate_distance((self.center_x, self.center_y), (person.center_x, person.center_y))
-                    if distance < PERSON_RADIUS * 2:
-                        self.infect()
-                        break
-                    elif distance < 300:
-                        self.close_persons.append(person)
-            else:
-                for person in self.close_persons:
-                    distance = calculate_distance((self.center_x, self.center_y), (person.center_x, person.center_y))
-                    if distance < PERSON_RADIUS * 2:
-                        self.infect()
-                        break"""
 
         # am i gonna visit?
         if random.uniform(0, 100) < VISITING_CHANCE:
             self.visiting = True
-            self.visiting_time = random.randint(20, 100)
+            self.visiting_time = random.randint(100, 1000)
             random_house = random.choice(self.parent_game.houses)
             while random_house.persons == 0:
                 random_house = random.choice(self.parent_game.houses)
             self.area = random_house.area
 
+        if random.uniform(0, 10000) < 1:
+            self.visiting = True
+            self.visiting_time = random.randint(10, 20)
+            self.area = self.parent_game.houses[-1].area
+
         # am i in the right spot? if not where do i go?
         if check_in_area((self.center_x, self.center_y), self.area):  # in the correct area
+            self.traveling = False
             if self.visiting:
                 self.visiting_ticks += 1
                 if self.visiting_ticks > self.visiting_time:
@@ -124,6 +125,7 @@ class Person(arcade.Sprite):
             self.random_change()
 
         else:
+            self.traveling = True
             self.speed = TRAVELING_SPEED
             self.go_to(self.area)
 
@@ -164,21 +166,41 @@ class Person(arcade.Sprite):
         self.parent_game.infected_persons.remove(self)
         self.parent_game.sprites.remove(self)
 
+    def recover(self):
+        self.infected = False
+        self.recovered = True
+        self.parent_game.infected -= 1
+        self.parent_game.recovered += 1
+        self.parent_game.infected_persons.remove(self)
+        self._set_color((0, 0, 255))
 
-class House:
-    def __init__(self, width, center_x, center_y, sprite):
+    def infectable(self):
+        if self.recovered:
+            self.recovered = False
+            self.parent_game.recovered -= 1
+        if self.infected:
+            self.infected = False
+            self.parent_game.infected -= 1
+        
+        self._set_color((255, 255, 255))
+
+
+class House(arcade.Sprite):
+    def __init__(self, width, center_x, center_y):
+        super().__init__(
+                    "house.png",
+                    scale= 0.5,
+                    image_width=100,
+                    image_height=100,
+                    center_x=center_x,
+                    center_y=center_y
+                )
         self.center_x = center_x
         self.center_y = center_y
-        self.width = width
-        self.sprite = sprite
         self.persons = []
+        self.width = HOUSE_WIDTH
+        self.height = HOUSE_WIDTH
         self.area = ((self.center_x-self.width/2, self.center_y-self.width/2), (self.center_x+self.width/2, self.center_y+self.width/2))
-
-    def on_draw(self):
-        #arcade.draw_rectangle_outline(center_x=self.center_x, center_y=self.center_y, width=self.width, height=self.width, border_width=1, color=(255, 255, 255))
-
-        for person in self.persons:
-            person.on_draw()
 
 
 class Game(arcade.Window):
@@ -187,7 +209,10 @@ class Game(arcade.Window):
         self.living = 0
         self.infected = 0
         self.dead = 0
+        self.recovered = 0
+        self.recovered_time_line = []
         self.infected_persons = []
+        self.untouched_time_line = []
         self.houses = []
         self.infected_time_line = []
         self.dead_time_line = []
@@ -205,25 +230,19 @@ class Game(arcade.Window):
             for x in range(grid[0]):
                 center_x = x * (SCREEN_WIDTH / grid[0]) + (0.5 * (SCREEN_WIDTH / grid[0]))
                 center_y = y * (SCREEN_HEIGHT / grid[1]) + (0.5 * (SCREEN_HEIGHT / grid[1]))
-                sprite = arcade.Sprite(
-                    "house.png",
-                    scale= 0.5,
-                    image_width=100,
-                    image_height=100,
-                    center_x=center_x,
-                    center_y=center_y
-                )
                 self.houses.append(
                     House(
                         HOUSE_WIDTH,
                         center_x,
-                        center_y,
-                        sprite
+                        center_y
                     )
                 )
-                self.sprites.append(self.houses[-1].sprite)
+                self.sprites.append(self.houses[-1])
 
         for house in self.houses:
+            if house == self.houses[-1]:
+                break
+
             for i in range(random.randint(1, 6)):
                 i += 1  # to get rid of the warning
                 self.living += 1
@@ -248,6 +267,8 @@ class Game(arcade.Window):
         self.tick += 1
         self.infected_time_line.append(self.infected)
         self.dead_time_line.append(self.dead)
+        self.recovered_time_line.append(self.recovered)
+        self.untouched_time_line.append(self.living - self.recovered - self.infected)
 
         divide_num = 10
         if HOUSES < divide_num:
@@ -266,8 +287,6 @@ class Game(arcade.Window):
 
         self.sprites.draw()
 
-        #for house in self.houses:
-        #   house.on_draw()
 
     def on_key_press(self, key, mod):
         if key == arcade.key.I:
@@ -281,19 +300,28 @@ class Game(arcade.Window):
             person.infect()
         
         if key == arcade.key.E:
-            print('export')
             self.export()
+
+        if key == arcade.key.Q:
+            global VISITING_CHANCE
+            if not VISITING_CHANCE:
+                VISITING_CHANCE = DEFAULT_VISITING_CHANCE
+            else:
+                VISITING_CHANCE = 0
+
+                for h in self.houses:
+                    for p in h.persons:
+                        p.visiting_time = 0
     
     def export(self):
         import sys
         try:
             json.dump(
-                    {"infected": self.infected_time_line, "dead": self.dead_time_line},
+                    {"infected": self.infected_time_line, "dead": self.dead_time_line, "recovered": self.recovered_time_line, "untouched": self.untouched_time_line},
                     open("export.json", 'w')
                 )
         except:
             print(sys.exc_info())
-        print('exported')
 
 def main():
     game = Game()
